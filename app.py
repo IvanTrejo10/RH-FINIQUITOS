@@ -309,7 +309,7 @@ def seccion_colaborador(calc: dict, avisos: dict, completo: bool, con_error: boo
         texto("Hora del convenio", "hora", d, mayusculas=False, placeholder="09:30", max_chars=5,
               icon=":material/schedule:")
         if not avisar(d, avisos, "hora"):
-            d.caption(f"Opcional. Vacía, sale `{D.hora_local(st.session_state['estado'] or '')}`.")
+            d.caption(f"Opcional. Vacía, sale {D.hora_local(st.session_state['estado'] or '')} hrs.")
         a, b = st.columns(2)
         texto("RFC (para la constancia)", "rfc", a, max_chars=13, placeholder="13 CARACTERES CON HOMOCLAVE")
         avisar(a, avisos, "rfc")
