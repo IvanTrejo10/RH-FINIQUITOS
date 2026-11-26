@@ -54,6 +54,9 @@ def icon(name: str, size: int = 20) -> str:
         "alert": '<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>',
         "lock": '<rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
         "briefcase": '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/>',
+        "upload": '<path d="M12 16V4m-5 4 5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+        "tabs": '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M9 4v5M15 4v5"/>',
+        "zip": '<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2Z"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/>',
     }
     return (
         f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
@@ -181,7 +184,7 @@ def hero() -> None:
         f'{logo_pill}'
         '<span class="hero-kicker"><i class="kicker-dot"></i><span>RECURSOS HUMANOS · ESTUDIO DOCUMENTAL</span></span>'
         '</div>'
-        '<h1 class="hero-title">Convenios y finiquitos<br><span class="hero-gradient"></span></h1>'
+        '<h1 class="hero-title">Convenios y finiquitos</h1>'
         '<p class="hero-sub">Captura los datos del colaborador en un solo flujo y descarga el convenio de finiquito, la carta de renuncia y la constancia laboral membretada en PDF.</p>'
         '<div class="hero-chips">'
         f'<span class="hero-chip gold">{icon("zap", 14)} Escenarios 0, 15, 30 y 45 días</span>'
@@ -329,6 +332,21 @@ def perc_col_header(texto: str, derecha: bool = False) -> None:
     put(f'<div class="{cls}">{_txt(texto)}</div>')
 
 
+def optional_fields_bar(activos: int) -> None:
+    put(
+        '<div class="opt-bar">'
+        '<div class="opt-bar-left">'
+        f'<span class="opt-bar-ico">{icon("spark", 14)}</span>'
+        '<div>'
+        '<strong>Datos opcionales en los documentos</strong>'
+        '<span>Activa o desactiva si deseas imprimir la hora (en el convenio) o el RFC y NSS (en la constancia).</span>'
+        '</div>'
+        '</div>'
+        f'<span class="opt-bar-badge">{activos}/3 incluidos</span>'
+        '</div>'
+    )
+
+
 def perc_row_label(nombre: str, obligatorio: bool = False, negrita: bool = False) -> None:
     cls = "perc-row-title bold" if negrita else "perc-row-title"
     extra = ""
@@ -367,14 +385,21 @@ def section_divider(anchor: str, titulo: str, subtitulo: str, icono: str) -> Non
     )
 
 
-def sidebar_brand() -> None:
+def sidebar_brand(num_hoja: int = 1, total_hojas: int = 1, colaborador: str = "") -> None:
+    nom = _txt(colaborador or "Nueva baja")
+    if len(nom) > 22:
+        nom = nom[:20].rstrip() + "…"
     put(
         '<div class="side-brand">'
         f'<span class="side-brand-mark">{icon("caprepa", 21)}</span>'
-        '<div>'
+        '<div style="min-width:0;flex:1">'
         '<div class="side-brand-title">RH<span> Finiquitos</span></div>'
         '<div class="side-brand-sub"><i class="live-dot"></i>BÓVEDA &amp; PDF STUDIO</div>'
         '</div>'
+        '</div>'
+        '<div class="side-sheet-pill">'
+        f'<span class="ssp-tag">HOJA {num_hoja}/{total_hojas}</span>'
+        f'<strong class="ssp-name">{nom}</strong>'
         '</div>'
     )
 
@@ -455,8 +480,132 @@ def sidebar_doc_pending(
 def sidebar_privacy_note() -> None:
     put(
         '<div class="side-note">'
-        f'<div class="side-note-head"><span class="shield-badge">{icon("shield", 15)}</span><h4>Privacidad en memoria</h4></div>'
-        '<p>Lo que captures no se guarda en disco ni base de datos: arma los PDF al vuelo y se borra al cerrar la pestaña.</p>'
+        f'<div class="side-note-head"><span class="shield-badge">{icon("shield", 15)}</span><h4>Autoguardado de trabajo</h4></div>'
+        '<p>Tus hojas abiertas y el historial se conservan mientras trabajas. Descarga tu Excel al terminar o vacía el historial cuando gustes.</p>'
+        '</div>'
+    )
+
+
+def sheets_bar_header(*, total_hojas: int, listas_n: int, indice_actual: int) -> None:
+    estado_lote = (
+        f"{listas_n} {'hoja lista' if listas_n == 1 else 'hojas listas'} para PDF"
+        if listas_n else "Captura en paralelo sin perder avances"
+    )
+    put(
+        '<div class="sheets-head">'
+        '<div class="sheets-head-left">'
+        f'<span class="sheets-orb">{icon("tabs", 17)}</span>'
+        '<div>'
+        '<span class="sheets-eyebrow">MESA MULTI-HOJA · ESTILO EXCEL</span>'
+        '<strong>Hojas de bajas activas</strong>'
+        '<small>Si en una baja falta un dato, abre otra hoja y continúa con la siguiente persona sin perder nada.</small>'
+        '</div>'
+        '</div>'
+        '<div class="sheets-badges">'
+        f'<span class="sh-pill gold">Hoja {indice_actual} de {total_hojas}</span>'
+        f'<span class="sh-pill teal">{_txt(estado_lote)}</span>'
+        '</div>'
+        '</div>'
+    )
+
+
+def batch_ready_banner(listas_n: int) -> None:
+    put(
+        '<div class="batch-banner">'
+        f'<span class="batch-ico">{icon("zip", 17)}</span>'
+        '<div>'
+        f'<strong>Descarga por lote disponible ({listas_n} hojas listas)</strong>'
+        '<span>Empaqueta de una sola vez todos los PDFs habilitados de tus hojas junto con el Excel consolidado.</span>'
+        '</div>'
+        '</div>'
+    )
+
+
+def pdf_import_header() -> None:
+    put(
+        '<div class="card-head">'
+        '<div class="card-head-left">'
+        f'<div class="card-orb teal">{icon("upload", 20)}</div>'
+        '<div class="card-titles">'
+        '<span class="card-step-eyebrow">RE-EDICIÓN INTELIGENTE DE DOCUMENTOS</span>'
+        '<h3>Subir PDF para llenar una hoja y editar</h3>'
+        '<p>Carga un Convenio, Carta de renuncia o Constancia laboral ya generada: leeremos sus datos para que cambies solo lo necesario.</p>'
+        '</div>'
+        '</div>'
+        '<span class="card-pill done"><span>Convenio · Renuncia · Constancia</span></span>'
+        '</div>'
+    )
+
+
+def pdf_import_preview(
+    *,
+    tipo_titulo: str,
+    origen: str,
+    colaborador: str,
+    empresa: str,
+    plaza: str,
+    vigencia: str,
+    sueldo_txt: str,
+    escenario_txt: str,
+) -> None:
+    origen_lbl = "Fidelidad 100% · Metadatos RH" if origen == "metadatos" else "Lectura automática del texto PDF"
+    put(
+        '<div class="pdf-extract-card anim-reveal">'
+        '<div class="pec-top">'
+        f'<span class="pec-doc-badge">{icon("check", 13)} {_txt(tipo_titulo)} DETECTADO</span>'
+        f'<span class="pec-origin">{_txt(origen_lbl)}</span>'
+        '</div>'
+        '<div class="pec-grid">'
+        f'<div class="pec-item"><span>COLABORADOR</span><strong>{_txt(colaborador or "—")}</strong></div>'
+        f'<div class="pec-item"><span>EMPRESA</span><strong>{_txt(empresa or "—")}</strong></div>'
+        f'<div class="pec-item"><span>SUCURSAL / PLAZA</span><strong>{_txt(plaza or "—")}</strong></div>'
+        f'<div class="pec-item"><span>VIGENCIA LABORAL</span><strong>{_txt(vigencia or "—")}</strong></div>'
+        f'<div class="pec-item"><span>SUELDO MENSUAL</span><strong>{_txt(sueldo_txt or "—")}</strong></div>'
+        f'<div class="pec-item gold"><span>ESCENARIO / TOTAL</span><strong>{_txt(escenario_txt or "—")}</strong></div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def history_kpis(
+    *,
+    total_registros: int,
+    empresas_unicas: int,
+    suma_base_txt: str,
+    hojas_abiertas: int,
+) -> None:
+    put(
+        '<div class="kpi-grid anim-reveal" style="--delay:80ms">'
+        '<div class="kpi-card">'
+        f'<div class="kpi-top"><span>CONVENIOS EN BITÁCORA</span><i class="kpi-ico teal">{icon("history", 15)}</i></div>'
+        f'<strong class="kpi-val emerald">{total_registros:02d}</strong>'
+        '<small>Listos para exportar a Excel</small>'
+        '</div>'
+        '<div class="kpi-card">'
+        f'<div class="kpi-top"><span>EMPRESAS / RAZONES</span><i class="kpi-ico blue">{icon("building", 15)}</i></div>'
+        f'<strong class="kpi-val">{empresas_unicas:02d}</strong>'
+        '<small>Con movimientos registrados</small>'
+        '</div>'
+        '<div class="kpi-card kpi-gold">'
+        f'<div class="kpi-top"><span>ACUMULADO BASE (0 DÍAS)</span><i class="kpi-ico gold">{icon("coins", 15)}</i></div>'
+        f'<strong class="kpi-val gold">{_txt(suma_base_txt)}</strong>'
+        '<small>Suma neta sin días extra</small>'
+        '</div>'
+        '<div class="kpi-card">'
+        f'<div class="kpi-top"><span>HOJAS ACTIVAS</span><i class="kpi-ico teal">{icon("tabs", 15)}</i></div>'
+        f'<strong class="kpi-val">{hojas_abiertas:02d}</strong>'
+        '<small>Autoguardado activo</small>'
+        '</div>'
+        '</div>'
+    )
+
+
+def history_empty_state() -> None:
+    put(
+        '<div class="hist-empty">'
+        f'<div class="hist-empty-orb">{icon("history", 26)}</div>'
+        '<h3>Aún no hay convenios en el historial</h3>'
+        '<p>Cada vez que abras un convenio para descargarlo (o pulses <b>Guardar hoja en historial</b>), quedará registrado aquí para que puedas reabrirlo en una hoja nueva o descargar el Excel consolidado.</p>'
         '</div>'
     )
 

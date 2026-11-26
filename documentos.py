@@ -13,18 +13,23 @@ Bloques:
 """
 from __future__ import annotations
 
+import base64
 import io
+import json
 import re
 import unicodedata
+import zipfile
+import zlib
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from PIL import Image, ImageOps
+from pypdf import PdfReader
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfgen import canvas as lienzo_pdf
@@ -274,6 +279,7 @@ def captura_vacia() -> dict:
     return {
         "empresa": "", "sucursal": "", "estado": "", "ciudad": "", "representante": "",
         "nombre": "", "idNomina": "", "sueldo": "", "ingreso": None, "baja": None, "hora": "", "rfc": "", "nss": "",
+        "incluirHora": True, "incluirRfc": True, "incluirNss": True,
         "perc": {p["k"]: {"periodo": "", "dias": "", "monto": ""} for p in PERCEPCIONES},
         "desc": {d["k"]: "" for d in DESCUENTOS},
     }
@@ -321,7 +327,7 @@ def calcular(s: dict) -> dict:
 _PIDE = {
     "convenio": ["empresa", "representante", "sucursal", "estado", "ciudad", "nombre", "ingreso", "baja", "sueldo"],
     "renuncia": ["empresa", "estado", "ciudad", "nombre", "baja"],
-    "constancia": ["empresa", "estado", "ciudad", "nombre", "ingreso", "baja", "rfc", "nss"],
+    "constancia": ["empresa", "estado", "ciudad", "nombre", "ingreso", "baja"],
 }
 _NOMBRES = {
     "empresa": "la empresa", "sucursal": "la sucursal", "estado": "el estado", "ciudad": "la ciudad",
@@ -401,11 +407,11 @@ def mal_escritos(s: dict) -> dict[str, str]:
     for d in DESCUENTOS:
         if not es_monto((s.get("desc") or {}).get(d["k"])):
             e[f"desc.{d['k']}"] = AVISO_MONTO
-    if limpio(s.get("hora")) and not _es_hora(s.get("hora")):
+    if s.get("incluirHora", True) and limpio(s.get("hora")) and not _es_hora(s.get("hora")):
         e["hora"] = "Escribe la hora como 09:30"
-    if limpio(s.get("rfc")) and len(limpio(s.get("rfc"))) != 13:
+    if s.get("incluirRfc", True) and limpio(s.get("rfc")) and len(limpio(s.get("rfc"))) != 13:
         e["rfc"] = "El RFC debe tener 13 caracteres"
-    if limpio(s.get("nss")) and not _es_nss(s.get("nss")):
+    if s.get("incluirNss", True) and limpio(s.get("nss")) and not _es_nss(s.get("nss")):
         e["nss"] = "Deben ser 11 dígitos, sin espacios ni guiones"
     return e
 
@@ -443,16 +449,22 @@ def validar(s: dict, firmante: dict | None, documento: str) -> list[tuple[str, s
         for d in DESCUENTOS:
             if not es_monto((s.get("desc") or {}).get(d["k"])):
                 e.append((f"desc.{d['k']}", "Revisa el descuento de " + d["nombre"].lower()))
-        if limpio(s.get("hora")) and not _es_hora(s.get("hora")):
+        if s.get("incluirHora", True) and limpio(s.get("hora")) and not _es_hora(s.get("hora")):
             e.append(("hora", "La hora debe ir como 09:30"))
         if not e and calcular(s)["opciones"][0]["total"] < 0:
             e.append(("desc.faltante", "Los descuentos son mayores que las percepciones"))
 
     if documento == "constancia":
-        if limpio(s.get("rfc")) and len(limpio(s.get("rfc"))) != 13:
-            e.append(("rfc", "El RFC debe tener 13 caracteres"))
-        if limpio(s.get("nss")) and not _es_nss(s.get("nss")):
-            e.append(("nss", "El número de seguro social debe tener 11 dígitos"))
+        if s.get("incluirRfc", True):
+            if not limpio(s.get("rfc")):
+                e.append(("rfc", "Falta " + _NOMBRES["rfc"]))
+            elif len(limpio(s.get("rfc"))) != 13:
+                e.append(("rfc", "El RFC debe tener 13 caracteres"))
+        if s.get("incluirNss", True):
+            if not limpio(s.get("nss")):
+                e.append(("nss", "Falta " + _NOMBRES["nss"]))
+            elif not _es_nss(s.get("nss")):
+                e.append(("nss", "El número de seguro social debe tener 11 dígitos"))
         if not limpio((firmante or {}).get("nombre")):
             e.append(("firmante.nombre", "Falta el nombre de quien firma la constancia"))
     return e
@@ -463,12 +475,18 @@ def validar(s: dict, firmante: dict | None, documento: str) -> list[tuple[str, s
 def datos(s: dict, firmante: dict | None = None, ahora: datetime | None = None) -> dict:
     f = firmante or {}
     calc = calcular(s)
+    inc_hora = bool(s.get("incluirHora", True))
+    inc_rfc = bool(s.get("incluirRfc", True))
+    inc_nss = bool(s.get("incluirNss", True))
     return {
         "empresa": may(s.get("empresa")), "sucursal": may(s.get("sucursal")), "estado": may(s.get("estado")),
         "ciudad": may(s.get("ciudad")), "representante": may(s.get("representante")), "nombre": may(s.get("nombre")),
-        "rfc": may(s.get("rfc")), "nss": limpio(s.get("nss")), "idNomina": limpio(s.get("idNomina")),
+        "rfc": may(s.get("rfc")) if inc_rfc else "",
+        "nss": limpio(s.get("nss")) if inc_nss else "",
+        "idNomina": limpio(s.get("idNomina")),
         "ingreso": calc["ingreso"], "baja": calc["baja"],
-        "hora": limpio(s.get("hora")) or hora_local(s.get("estado"), ahora), "calc": calc,
+        "hora": (limpio(s.get("hora")) or hora_local(s.get("estado"), ahora)) if inc_hora else "",
+        "calc": calc,
         "firmante": {
             "nombre": may(f.get("nombre")), "area": may(f.get("area")), "telefono": limpio(f.get("telefono")),
             "correo": limpio(f.get("correo")),
@@ -514,12 +532,13 @@ def encabezado_convenio(d: dict) -> list[str]:
 
 
 def intro_convenio(d: dict) -> str:
-    return (f"En la ciudad de {d['ciudad']}, {d['estado']}, siendo las {d['hora']} horas del día "
-            f"{fecha_texto(d['baja'])}, ante las oficinas de la H. Junta Local de Conciliación y Arbitraje del Estado "
-            f"de {d['estado']} comparecemos los suscritos C. {d['nombre']} como “TRABAJADOR(A)” y por la otra parte la "
-            f"empresa {d['empresa']} como “PATRÓN”, representada en este acto por el (la) C. {d['representante']} "
-            "quienes de común acuerdo celebramos el presente CONVENIO reconociéndonos la personalidad con que "
-            "comparecemos, con arreglo a las siguientes:")
+    cuando = (f"siendo las {d['hora']} horas del día {fecha_texto(d['baja'])}"
+              if d["hora"] else f"el día {fecha_texto(d['baja'])}")
+    return (f"En la ciudad de {d['ciudad']}, {d['estado']}, {cuando}, ante las oficinas de la H. Junta Local "
+            f"de Conciliación y Arbitraje del Estado de {d['estado']} comparecemos los suscritos C. {d['nombre']} "
+            f"como “TRABAJADOR(A)” y por la otra parte la empresa {d['empresa']} como “PATRÓN”, representada en "
+            f"este acto por el (la) C. {d['representante']} quienes de común acuerdo celebramos el presente "
+            "CONVENIO reconociéndonos la personalidad con que comparecemos, con arreglo a las siguientes:")
 
 
 def primera(d: dict) -> str:
@@ -570,8 +589,14 @@ CIERRE_CONSTANCIA = ("EXTIENDO LA PRESENTE CARTA LABORAL, SUSCRIBIÉNDOME A SUS 
 
 
 def cuerpo_constancia(d: dict) -> str:
+    registros = []
+    if d["nss"]:
+        registros.append(f"NÚMERO DE SEGURIDAD SOCIAL {d['nss']}")
+    if d["rfc"]:
+        registros.append(f"RFC {d['rfc']}")
+    identificacion = ("CON " + " Y ".join(registros) + " ") if registros else ""
     return (f"POR MEDIO DE LA PRESENTE SE HACE CONSTAR QUE EL C. {d['nombre']} LABORÓ PARA LA EMPRESA {d['empresa']} "
-            f"CON NÚMERO DE SEGURIDAD SOCIAL {d['nss']} Y RFC {d['rfc']} A PARTIR DEL DÍA {fecha_texto(d['ingreso'])} "
+            f"{identificacion}A PARTIR DEL DÍA {fecha_texto(d['ingreso'])} "
             f"HASTA EL DÍA {fecha_texto(d['baja'])}.").upper()
 
 
@@ -867,7 +892,7 @@ def constancia(d: dict) -> list[Hoja]:
 
 # ---------------------------------- PDF ----------------------------------
 
-def crear_pdf(hojas: list[Hoja], titulo: str, firma_png: bytes | None = None) -> bytes:
+def crear_pdf(hojas: list[Hoja], titulo: str, firma_png: bytes | None = None, meta_kw: str = "") -> bytes:
     """Escribe las hojas maquetadas en un PDF tamaño carta y devuelve sus bytes."""
     memoria = io.BytesIO()
     pdf = lienzo_pdf.Canvas(memoria, pagesize=(ANCHO_HOJA, ALTO_HOJA), pageCompression=1)
@@ -875,6 +900,8 @@ def crear_pdf(hojas: list[Hoja], titulo: str, firma_png: bytes | None = None) ->
     pdf.setSubject("Convenios y finiquitos")
     pdf.setAuthor("Recursos Humanos")
     pdf.setCreator("Convenios y finiquitos - Recursos Humanos")
+    if meta_kw:
+        pdf.setKeywords(meta_kw)
     imagenes = {"fondo": str(RECURSOS / "fondo.jpg"), "logo": str(RECURSOS / "logo.png"),
                 "sello": str(RECURSOS / "sello.png")}
     if firma_png:
@@ -897,6 +924,16 @@ def crear_pdf(hojas: list[Hoja], titulo: str, firma_png: bytes | None = None) ->
     return memoria.getvalue()
 
 
+def _codificar_meta(documento: str, s: dict, dias) -> str:
+    """Empaqueta la captura en ASCII comprimido para reimportar el PDF con fidelidad total."""
+    try:
+        crudo = json.dumps({"v": 1, "doc": documento, "dias": dias, "s": s}, ensure_ascii=False, default=str)
+        comp = zlib.compress(crudo.encode("utf-8"), level=9)
+        return "RHFINI1:" + base64.b64encode(comp).decode("ascii")
+    except Exception:
+        return ""
+
+
 def _archivo(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r'[\\/:*?"<>|\x00-\x1f]', " ", limpio(s))).strip()[:150]
 
@@ -915,13 +952,14 @@ def pdf_documento(documento: str, s: dict, firmante: dict | None = None, dias="0
     """PDF de "convenio" (dias = 0, 15, 30, 45 o "todos"), "renuncia" o "constancia"."""
     d = datos(s, firmante, ahora)
     titulo = nombre_archivo(documento, s, dias)[:-4]
+    meta = _codificar_meta(documento, s, dias)
     if documento == "convenio":
         opciones = DIAS_CONVENIO if str(dias) == "todos" else [int(dias)]
-        return crear_pdf(convenio(d, opciones), titulo)
+        return crear_pdf(convenio(d, opciones), titulo, meta_kw=meta)
     if documento == "renuncia":
-        return crear_pdf(renuncia(d), titulo)
+        return crear_pdf(renuncia(d), titulo, meta_kw=meta)
     firma = d["firmante"]["firma"]
-    return crear_pdf(constancia(d), titulo, firma["png"] if firma else None)
+    return crear_pdf(constancia(d), titulo, firma["png"] if firma else None, meta_kw=meta)
 
 
 # --------------------------------- Firma ---------------------------------
@@ -1046,4 +1084,420 @@ def libro_historial(capturas: list[dict]) -> bytes:
     hoja.freeze_panes = "A2"
     memoria = io.BytesIO()
     libro.save(memoria)
+    return memoria.getvalue()
+
+
+# --------------------- Importación de PDF, Excel y Lote ZIP ---------------------
+
+_MESES_MAPA = {sin_acentos(m): i + 1 for i, m in enumerate(MESES)}
+_ESTADOS_ORDEN = sorted(ESTADOS, key=len, reverse=True)
+
+
+def normalizar_captura(parcial: dict | None) -> dict:
+    """Garantiza que un diccionario importado tenga todas las llaves esperadas por la pantalla."""
+    base = captura_vacia()
+    if not parcial:
+        return base
+    for k in ("empresa", "sucursal", "estado", "ciudad", "representante", "nombre",
+              "idNomina", "sueldo", "ingreso", "baja", "hora", "rfc", "nss"):
+        val = parcial.get(k)
+        if isinstance(val, (date, datetime)):
+            base[k] = fecha_corta(val.date() if isinstance(val, datetime) else val)
+        else:
+            base[k] = "" if val is None else str(val)
+    for k in ("incluirHora", "incluirRfc", "incluirNss"):
+        if k in parcial:
+            base[k] = bool(parcial[k])
+    perc_in = parcial.get("perc") or {}
+    for p in PERCEPCIONES:
+        r = perc_in.get(p["k"]) or {}
+        base["perc"][p["k"]] = {
+            campo: ("" if r.get(campo) is None else str(r.get(campo)))
+            for campo in ("periodo", "dias", "monto")
+        }
+    desc_in = parcial.get("desc") or {}
+    for d in DESCUENTOS:
+        val = desc_in.get(d["k"])
+        base["desc"][d["k"]] = "" if val is None else str(val)
+    return base
+
+
+def _fecha_larga_a_corta(texto: str) -> str:
+    m = re.search(r"(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})", texto, flags=re.IGNORECASE)
+    if not m:
+        return ""
+    dia, mes_txt, anio = int(m.group(1)), _MESES_MAPA.get(sin_acentos(m.group(2))), int(m.group(3))
+    if not mes_txt:
+        return ""
+    try:
+        return fecha_corta(date(anio, mes_txt, dia))
+    except ValueError:
+        return ""
+
+
+def _emparejar_estado(texto_estado: str) -> str:
+    buscado = sin_acentos(texto_estado)
+    for e in ESTADOS:
+        if sin_acentos(e) == buscado:
+            return e
+    return may(texto_estado)
+
+
+def _partir_lugar_fecha(linea: str) -> tuple[str, str, str]:
+    """Extrae (ciudad, estado, fecha_baja) de 'CULIACÁN, SINALOA A 26 DE NOVIEMBRE DE 2026.'."""
+    m = re.match(r"^(.+?)\s+A\s+(\d{1,2}\s+DE\s+[A-ZÁÉÍÓÚÑ]+\s+DE\s+\d{4})\.?$", limpio(linea), flags=re.IGNORECASE)
+    if not m:
+        return "", "", ""
+    lugar, f_txt = limpio(m.group(1)), _fecha_larga_a_corta(m.group(2))
+    lugar_norm = sin_acentos(lugar)
+    for est in _ESTADOS_ORDEN:
+        est_norm = sin_acentos(est)
+        sufijo = ", " + est_norm
+        if lugar_norm.endswith(sufijo):
+            ciudad = limpio(lugar[: len(lugar) - len(sufijo)])
+            return may(ciudad), est, f_txt
+    if "," in lugar:
+        ciudad, est_raw = lugar.rsplit(",", 1)
+        return may(ciudad), _emparejar_estado(est_raw), f_txt
+    return may(lugar), "", f_txt
+
+
+def leer_pdf_documento(contenido: bytes) -> dict:
+    """Lee un PDF de convenio, renuncia o constancia y devuelve sus campos listos para editar."""
+    try:
+        lector = PdfReader(io.BytesIO(contenido))
+    except Exception as error:
+        raise ValueError("No se pudo abrir el archivo PDF. Verifica que no esté dañado o protegido.") from error
+    if not lector.pages:
+        raise ValueError("El PDF no contiene páginas.")
+
+    # 1. Vía exacta: metadatos incrustados por RH Studio
+    meta_kw = ""
+    try:
+        meta_kw = str((lector.metadata or {}).get("/Keywords") or "")
+    except Exception:
+        meta_kw = ""
+    if meta_kw.startswith("RHFINI1:"):
+        try:
+            raw = zlib.decompress(base64.b64decode(meta_kw[8:].encode("ascii"))).decode("utf-8")
+            carga = json.loads(raw)
+            dias = carga.get("dias", 0)
+            if str(dias) != "todos":
+                dias = int(dias) if int(dias) in DIAS_CONVENIO else 0
+            return {
+                "documento": str(carga.get("doc") or "convenio"),
+                "captura": normalizar_captura(carga.get("s")),
+                "dias": dias,
+                "origen": "metadatos",
+            }
+        except Exception:
+            pass
+
+    # 2. Vía universal: análisis inteligente del texto del PDF (incluye PDFs anteriores)
+    texto_p0 = lector.pages[0].extract_text() or ""
+    lineas = [limpio(x) for x in texto_p0.splitlines() if limpio(x)]
+    plano = " ".join(lineas)
+    plano_may = plano.upper()
+
+    s = captura_vacia()
+    dias_sel: int | str = 0
+
+    if "CONVENIO ACTO" in plano_may or "PERCEPCIONES:" in plano_may:
+        doc_tipo = "convenio"
+        m_est = re.search(r"del Estado de (.+?) comparecemos", plano, flags=re.IGNORECASE)
+        if not m_est:
+            m_est = re.search(r"EN EL ESTADO DE (.+?) P R E S E N T E", plano, flags=re.IGNORECASE)
+        if m_est:
+            s["estado"] = _emparejar_estado(m_est.group(1))
+
+        m_intro_h = re.search(
+            r"En la ciudad de (.+?),\s*siendo las (\d{2}:\d{2}) horas del día (\d{1,2} de [a-záéíóúñ]+ de \d{4}),\s*ante las oficinas",
+            plano, flags=re.IGNORECASE,
+        )
+        m_intro_sin = re.search(
+            r"En la ciudad de (.+?),\s*el día (\d{1,2} de [a-záéíóúñ]+ de \d{4}),\s*ante las oficinas",
+            plano, flags=re.IGNORECASE,
+        )
+        lugar_intro = ""
+        if m_intro_h:
+            lugar_intro = limpio(m_intro_h.group(1))
+            s["hora"] = m_intro_h.group(2)
+            s["incluirHora"] = True
+            s["baja"] = _fecha_larga_a_corta(m_intro_h.group(3))
+        elif m_intro_sin:
+            lugar_intro = limpio(m_intro_sin.group(1))
+            s["hora"] = ""
+            s["incluirHora"] = False
+            s["baja"] = _fecha_larga_a_corta(m_intro_sin.group(2))
+
+        if lugar_intro:
+            if s["estado"] and sin_acentos(lugar_intro).endswith(", " + sin_acentos(s["estado"])):
+                s["ciudad"] = may(lugar_intro[: len(lugar_intro) - len(s["estado"]) - 2])
+            elif "," in lugar_intro:
+                ciu, est_r = lugar_intro.rsplit(",", 1)
+                s["ciudad"] = may(ciu)
+                if not s["estado"]:
+                    s["estado"] = _emparejar_estado(est_r)
+            else:
+                s["ciudad"] = may(lugar_intro)
+
+        m_partes = re.search(
+            r"comparecemos los suscritos C\.\s*(.+?)\s+como\s+[“\"']?TRABAJADOR\(A\)[”\"']?\s+y por la otra parte la empresa\s+(.+?)\s+como\s+[“\"']?PATR[ÓO]N[”\"']?,\s*representada en este acto por el \(la\) C\.\s*(.+?)\s+quienes de com[úu]n acuerdo",
+            plano, flags=re.IGNORECASE,
+        )
+        if m_partes:
+            s["nombre"] = may(m_partes.group(1))
+            s["empresa"] = may(m_partes.group(2))
+            s["representante"] = may(m_partes.group(3))
+
+        m_prim = re.search(
+            r"inici[óo] a partir del d[íi]a (\d{1,2} de [a-záéíóúñ]+ de \d{4}) hasta el d[íi]a (\d{1,2} de [a-záéíóúñ]+ de \d{4}).*?salario diario de \$([\d,]+\.\d{2})",
+            plano, flags=re.IGNORECASE,
+        )
+        diario_cent = 0
+        if m_prim:
+            s["ingreso"] = _fecha_larga_a_corta(m_prim.group(1))
+            if not s["baja"]:
+                s["baja"] = _fecha_larga_a_corta(m_prim.group(2))
+            diario_cent = centavos(m_prim.group(3))
+            if diario_cent:
+                s["sueldo"] = numero(diario_cent * 30)
+
+        m_suc = re.search(
+            r"CONOCIDA CON NOMBRES COMERCIALES COMO (.+?) Y/O QUIEN REPRESENTE SUS INTERESES",
+            plano, flags=re.IGNORECASE,
+        )
+        if m_suc:
+            s["sucursal"] = may(m_suc.group(1))
+
+        # Tabla de percepciones
+        etiquetas_perc = [p["doc"] for p in PERCEPCIONES] + ["TOTAL, PERCEPCIONES:"]
+        pos_perc = {}
+        cursor = 0
+        for etq in etiquetas_perc:
+            for idx in range(cursor, len(lineas)):
+                if sin_acentos(lineas[idx]) == sin_acentos(etq):
+                    pos_perc[etq] = idx
+                    cursor = idx + 1
+                    break
+
+        for i, p in enumerate(PERCEPCIONES):
+            ini = pos_perc.get(p["doc"])
+            fin = pos_perc.get(etiquetas_perc[i + 1])
+            if ini is None or fin is None or fin <= ini:
+                continue
+            celdas = lineas[ini + 1 : fin]
+            montos_tok = [t for t in celdas if "$" in t]
+            otros_tok = [t for t in celdas if "$" not in t]
+            if montos_tok:
+                c_val = centavos(montos_tok[-1])
+                s["perc"][p["k"]]["monto"] = numero(c_val)
+            elif p.get("obligatorio"):
+                s["perc"][p["k"]]["monto"] = "0.00"
+            if p.get("periodo") and p.get("dias"):
+                if len(otros_tok) >= 2:
+                    s["perc"][p["k"]]["periodo"] = otros_tok[0]
+                    s["perc"][p["k"]]["dias"] = otros_tok[1]
+                elif len(otros_tok) == 1:
+                    if re.fullmatch(r"20\d{2}", otros_tok[0]):
+                        s["perc"][p["k"]]["periodo"] = otros_tok[0]
+                    else:
+                        s["perc"][p["k"]]["dias"] = otros_tok[0]
+            elif p.get("dias") and otros_tok:
+                s["perc"][p["k"]]["dias"] = otros_tok[0]
+
+        # Tabla de descuentos
+        etiquetas_desc = [d["doc"] for d in DESCUENTOS] + ["TOTAL, DEDUCCIONES:"]
+        pos_desc = {}
+        for etq in etiquetas_desc:
+            for idx in range(cursor, len(lineas)):
+                if sin_acentos(lineas[idx]) == sin_acentos(etq):
+                    pos_desc[etq] = idx
+                    cursor = idx + 1
+                    break
+
+        for i, d_item in enumerate(DESCUENTOS):
+            ini = pos_desc.get(d_item["doc"])
+            fin = pos_desc.get(etiquetas_desc[i + 1])
+            if ini is None or fin is None or fin <= ini:
+                continue
+            montos_tok = [t for t in lineas[ini + 1 : fin] if "$" in t]
+            if montos_tok:
+                s["desc"][d_item["k"]] = numero(centavos(montos_tok[-1]))
+
+        # Detección inteligente de días de convenio (0, 15, 30, 45 o 4 hojas)
+        if len(lector.pages) == 4:
+            dias_sel = "todos"
+        elif "PAGO REALIZADO EN EFECTIVO" in plano_may and diario_cent > 0:
+            otras_c = centavos(s["perc"]["otras"]["monto"])
+            sueldo_c = diario_cent * 30
+            for cand in (15, 30, 45):
+                if otras_c == dividir(sueldo_c * cand, 30):
+                    dias_sel = cand
+                    s["perc"]["otras"]["monto"] = ""
+                    break
+
+        return {"documento": doc_tipo, "captura": s, "dias": dias_sel, "origen": "texto"}
+
+    if "C O N S T A N C I A" in plano_may or "SE HACE CONSTAR QUE" in plano_may:
+        doc_tipo = "constancia"
+        for lin in lineas[:10]:
+            if re.search(r"\s+A\s+\d{1,2}\s+DE\s+[A-ZÁÉÍÓÚÑ]+\s+DE\s+\d{4}\.?$", lin, flags=re.IGNORECASE):
+                s["ciudad"], s["estado"], s["baja"] = _partir_lugar_fecha(lin)
+                break
+        m_cuerpo = re.search(
+            r"SE HACE CONSTAR QUE EL C\.\s*(.+?)\s+LABOR[ÓO] PARA LA EMPRESA\s+(.+?)\s+A PARTIR DEL D[ÍI]A\s+(\d{1,2}\s+DE\s+[A-ZÁÉÍÓÚÑ]+\s+DE\s+\d{4})\s+HASTA EL D[ÍI]A\s+(\d{1,2}\s+DE\s+[A-ZÁÉÍÓÚÑ]+\s+DE\s+\d{4})",
+            plano, flags=re.IGNORECASE,
+        )
+        if m_cuerpo:
+            s["nombre"] = may(m_cuerpo.group(1))
+            emp_bloque = limpio(m_cuerpo.group(2))
+            s["ingreso"] = _fecha_larga_a_corta(m_cuerpo.group(3))
+            if not s["baja"]:
+                s["baja"] = _fecha_larga_a_corta(m_cuerpo.group(4))
+
+            m_ambos = re.match(
+                r"^(.+?)\s+CON N[ÚU]MERO DE SEGURIDAD SOCIAL\s+(\d{11})\s+Y RFC\s+([A-ZÑ&0-9]{12,13})$",
+                emp_bloque, flags=re.IGNORECASE,
+            )
+            m_solo_nss = re.match(
+                r"^(.+?)\s+CON N[ÚU]MERO DE SEGURIDAD SOCIAL\s+(\d{11})$",
+                emp_bloque, flags=re.IGNORECASE,
+            )
+            m_solo_rfc = re.match(
+                r"^(.+?)\s+CON RFC\s+([A-ZÑ&0-9]{12,13})$",
+                emp_bloque, flags=re.IGNORECASE,
+            )
+            if m_ambos:
+                s["empresa"] = may(m_ambos.group(1))
+                s["nss"], s["rfc"] = m_ambos.group(2), may(m_ambos.group(3))
+                s["incluirNss"], s["incluirRfc"] = True, True
+            elif m_solo_nss:
+                s["empresa"] = may(m_solo_nss.group(1))
+                s["nss"], s["incluirNss"], s["incluirRfc"] = m_solo_nss.group(2), True, False
+            elif m_solo_rfc:
+                s["empresa"] = may(m_solo_rfc.group(1))
+                s["rfc"], s["incluirRfc"], s["incluirNss"] = may(m_solo_rfc.group(2)), True, False
+            else:
+                s["empresa"] = may(emp_bloque)
+                s["incluirRfc"], s["incluirNss"] = False, False
+        return {"documento": doc_tipo, "captura": s, "dias": 0, "origen": "texto"}
+
+    if "INTERESES PARTICULARES" in plano_may or "DAR TERMINADA VOLUNTARIAMENTE" in plano_may:
+        doc_tipo = "renuncia"
+        if lineas:
+            s["ciudad"], s["estado"], s["baja"] = _partir_lugar_fecha(lineas[0])
+        if "A QUIEN CORRESPONDA:" in lineas:
+            idx_dest = lineas.index("A QUIEN CORRESPONDA:")
+            if idx_dest > 1:
+                s["empresa"] = may(" ".join(lineas[1:idx_dest]))
+        if "ATENTAMENTE" in lineas:
+            idx_att = lineas.index("ATENTAMENTE")
+            if idx_att + 1 < len(lineas):
+                s["nombre"] = may(" ".join(lineas[idx_att + 1 :]))
+        return {"documento": doc_tipo, "captura": s, "dias": 0, "origen": "texto"}
+
+    raise ValueError("Este PDF no coincide con el formato de Convenio, Carta de renuncia ni Constancia laboral.")
+
+
+def leer_excel_historial(contenido: bytes) -> list[dict]:
+    """Reconstruye las capturas desde un archivo Excel 'Historico convenios.xlsx'."""
+    try:
+        wb = load_workbook(io.BytesIO(contenido), data_only=True)
+    except Exception as error:
+        raise ValueError("No se pudo abrir el archivo Excel.") from error
+    ws = wb["Historico"] if "Historico" in wb.sheetnames else wb.active
+    filas = list(ws.iter_rows(values_only=True))
+    if len(filas) < 2:
+        return []
+    cabecera = [limpio(c) for c in filas[0]]
+    idx = {col: i for i, col in enumerate(cabecera) if col}
+    if "NOMBRE" not in idx or "EMPRESA" not in idx:
+        raise ValueError("El archivo Excel no tiene las columnas de la hoja Historico.")
+
+    def val(fila, col):
+        pos = idx.get(col)
+        return fila[pos] if pos is not None and pos < len(fila) else None
+
+    def fmt_m(v, oblig=False):
+        c = centavos(v)
+        if c:
+            return numero(c)
+        return "0.00" if oblig else ""
+
+    def fmt_d(v):
+        try:
+            n = a_numero(v)
+            return _dias(n) if n else ""
+        except ValueError:
+            return ""
+
+    capturas = []
+    for fila in filas[1:]:
+        dias_neg = val(fila, "Dias_Negociables")
+        if dias_neg not in (0, "0", None, "") and str(dias_neg).strip() != "0":
+            continue
+        s = captura_vacia()
+        s["idNomina"] = limpio(val(fila, "ID"))
+        s["nombre"] = may(val(fila, "NOMBRE"))
+        s["empresa"] = may(val(fila, "EMPRESA"))
+        s["sucursal"] = may(val(fila, "NOMBRE_COMERCIAL"))
+        s["estado"] = _emparejar_estado(limpio(val(fila, "ESTADO"))) if limpio(val(fila, "ESTADO")) else ""
+        s["ciudad"] = may(val(fila, "CIUDAD"))
+        s["representante"] = may(val(fila, "REPRESENTANTE"))
+        f_ing, f_baj = a_fecha(val(fila, "F_INGRESO")), a_fecha(val(fila, "F_BAJA"))
+        s["ingreso"] = fecha_corta(f_ing) if f_ing else ""
+        s["baja"] = fecha_corta(f_baj) if f_baj else ""
+        s["sueldo"] = fmt_m(val(fila, "SUELDO"))
+
+        s["perc"]["salarios"] = {"periodo": "", "dias": fmt_d(val(fila, "CTD_SALARIO_PENDIENTES")), "monto": fmt_m(val(fila, "SALARIOS_PENDIENTES"))}
+        s["perc"]["descanso"] = {"periodo": "", "dias": fmt_d(val(fila, "DESCFEST")), "monto": fmt_m(val(fila, "DESCANSO_Y_FESTIVO_LABORADO"))}
+        s["perc"]["aguinaldo"] = {"periodo": "", "dias": fmt_d(val(fila, "CTD_AGUINALDO_PENDIENTES")), "monto": fmt_m(val(fila, "AGUINALDO_PROP"), True)}
+        s["perc"]["vacaciones"] = {"periodo": "", "dias": fmt_d(val(fila, "CTD_VACACIONES_PROPORC")), "monto": fmt_m(val(fila, "VACS_PROP"), True)}
+        s["perc"]["prima"] = {"periodo": "", "dias": fmt_d(val(fila, "CTD_PRIMAVACPROP")), "monto": fmt_m(val(fila, "PRIMA_VAC_PROPORCIONAL"), True)}
+        s["perc"]["vacPend"] = {"periodo": "", "dias": fmt_d(val(fila, "CTDVAC_PENDIENTES")), "monto": fmt_m(val(fila, "VAC_PENDIENTES"))}
+        s["perc"]["fondoAhorro"] = {"periodo": "", "dias": "", "monto": fmt_m(val(fila, "LIQ_FONDO_AHORRO"))}
+        s["perc"]["fondoRetiro"] = {"periodo": "", "dias": "", "monto": fmt_m(val(fila, "FONDO_RETIRO"))}
+        s["perc"]["otras"] = {"periodo": "", "dias": "", "monto": fmt_m(val(fila, "OTRAS_PRESTACIONES_EXCENTAS"))}
+
+        mapa_desc = {
+            "infonavit": "DESCUENTO_INFONAVIT", "faltante": "DESC_FALTANTE", "cajaChica": "DESC_CAJA_CHICA",
+            "prestamo": "DESC_PRESTAMO", "siniestro": "DESC_SINIESTRO", "viaticos": "DESC_VIATICOS",
+            "otros": "DESC_OTROS", "diasNomina": "DESC_DIAS_PAGADOS",
+        }
+        for k_desc, col_xl in mapa_desc.items():
+            s["desc"][k_desc] = fmt_m(val(fila, col_xl))
+
+        if s["nombre"] or s["empresa"]:
+            capturas.append(s)
+    return capturas
+
+
+def paquete_lote_zip(elementos: list[tuple[dict, int | str]], firmante: dict | None = None) -> bytes:
+    """Empaqueta los PDFs habilitados de varias hojas junto con el Excel consolidado en un archivo ZIP."""
+    memoria = io.BytesIO()
+    capturas_convenio = []
+    usados: set[str] = set()
+
+    def unico(nombre: str) -> str:
+        base, ext = (nombre[:-4], ".pdf") if nombre.lower().endswith(".pdf") else (nombre, "")
+        cand = nombre
+        n = 2
+        while cand in usados:
+            cand = f"{base} ({n}){ext}"
+            n += 1
+        usados.add(cand)
+        return cand
+
+    with zipfile.ZipFile(memoria, "w", zipfile.ZIP_DEFLATED) as zf:
+        for s, dias in elementos:
+            if not validar(s, firmante, "convenio"):
+                zf.writestr(unico(nombre_archivo("convenio", s, dias)), pdf_documento("convenio", s, firmante, dias))
+                capturas_convenio.append(s)
+            if not validar(s, firmante, "renuncia"):
+                zf.writestr(unico(nombre_archivo("renuncia", s, dias)), pdf_documento("renuncia", s, firmante, dias))
+            if firmante and not validar(s, firmante, "constancia"):
+                zf.writestr(unico(nombre_archivo("constancia", s, dias)), pdf_documento("constancia", s, firmante, dias))
+        if capturas_convenio:
+            zf.writestr(f"Historico convenios {ahora_local():%Y-%m-%d}.xlsx", libro_historial(capturas_convenio))
     return memoria.getvalue()

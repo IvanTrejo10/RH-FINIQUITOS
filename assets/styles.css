@@ -474,11 +474,14 @@ html {
 }
 
 .hero-gradient {
-  background: linear-gradient(95deg, #5EEAD4 0%, #38BDF8 30%, #FDE68A 62%, #A5B4FC 84%, #5EEAD4 100%);
-  background-size: 240% auto;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  display: inline-block;
+  background-image: linear-gradient(95deg, #5EEAD4 0%, #38BDF8 30%, #FDE68A 62%, #A5B4FC 84%, #5EEAD4 100%) !important;
+  background-size: 240% auto !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  color: #5EEAD4 !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
   animation: gradientShift 7s ease infinite;
 }
 
@@ -1054,6 +1057,111 @@ html {
   opacity: 1 !important;
 }
 
+[data-testid="stTextInput"] input:disabled,
+[data-testid="stTextArea"] textarea:disabled {
+  color: #64748B !important;
+  -webkit-text-fill-color: #64748B !important;
+  cursor: not-allowed !important;
+}
+[data-testid="stTextInputRootElement"]:has(input:disabled) {
+  background: rgba(6, 11, 22, 0.55) !important;
+  background-color: rgba(6, 11, 22, 0.55) !important;
+  border-color: rgba(148, 163, 184, 0.12) !important;
+  opacity: 0.62;
+}
+
+/* Barra y tarjetas de campos opcionales (Hora, RFC y NSS) con st.toggle blindado */
+.opt-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 2px;
+  padding: 11px 15px;
+  border-radius: 14px;
+  background: linear-gradient(105deg, rgba(30, 58, 138, 0.22), rgba(11, 20, 40, 0.65));
+  border: 1px solid rgba(125, 211, 252, 0.2);
+}
+.opt-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.opt-bar-ico {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7DD3FC;
+  flex-shrink: 0;
+}
+.opt-bar-left strong {
+  display: block;
+  font: 700 13px/1.2 var(--display);
+  color: #F1F5F9;
+}
+.opt-bar-left span {
+  display: block;
+  font-size: 11.8px;
+  color: #94A3B8;
+  margin-top: 1px;
+}
+.opt-bar-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #5EEAD4;
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+}
+
+.st-key-opt_hora,
+.st-key-opt_rfc,
+.st-key-opt_nss {
+  padding: 12px 14px 10px;
+  border-radius: 16px;
+  background: rgba(7, 13, 27, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  transition: all 0.25s var(--ease);
+}
+.st-key-opt_hora:has([data-testid="stCheckbox"] input:checked),
+.st-key-opt_rfc:has([data-testid="stCheckbox"] input:checked),
+.st-key-opt_nss:has([data-testid="stCheckbox"] input:checked) {
+  background: linear-gradient(160deg, rgba(13, 30, 56, 0.72), rgba(8, 15, 32, 0.78));
+  border-color: rgba(45, 212, 191, 0.35);
+  box-shadow: inset 0 1px 0 rgba(94, 234, 212, 0.12);
+}
+
+/* Interruptor st.toggle / stCheckbox blindado contra modo claro */
+[data-testid="stCheckbox"] label {
+  color: #F1F5F9 !important;
+  cursor: pointer;
+}
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span {
+  color: #F1F5F9 !important;
+  font-size: 12.8px !important;
+  font-weight: 600 !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > div:first-child {
+  background-color: rgba(100, 116, 139, 0.45) !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+  transition: background-color 0.22s var(--ease), box-shadow 0.22s var(--ease) !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"]:has(input:checked) > div:first-child {
+  background-color: #14B8A6 !important;
+  border-color: #2DD4BF !important;
+  box-shadow: 0 0 14px rgba(20, 184, 166, 0.55) !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > div:first-child > div {
+  background-color: #FFFFFF !important;
+}
+
 [data-testid="stTextInput"] button {
   background: transparent !important;
   color: #94A3B8 !important;
@@ -1465,9 +1573,37 @@ li[role="option"][aria-selected="true"] * {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding-bottom: 14px;
-  margin-bottom: 12px;
+  padding-bottom: 11px;
+  margin-bottom: 8px;
   border-bottom: 1px solid var(--border);
+}
+
+.side-sheet-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.09);
+  border: 1px solid rgba(56, 189, 248, 0.26);
+}
+.side-sheet-pill .ssp-tag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #7DD3FC;
+  flex-shrink: 0;
+}
+.side-sheet-pill .ssp-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #F1F5F9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .side-brand-mark {
   display: grid;
@@ -1673,6 +1809,10 @@ li[role="option"][aria-selected="true"] * {
   background: transparent !important;
   border: none !important;
   cursor: pointer;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) > div:first-child {
+  background-color: #14B8A6 !important;
+  border-color: #5EEAD4 !important;
 }
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label p {
   font-size: 13px !important;
@@ -1942,6 +2082,394 @@ div[role="dialog"] {
   color: #94A3B8;
   font-size: 14px;
   margin: 0;
+}
+
+/* ═══ DOCK DE MODOS, MESA MULTI-HOJA, PORTAL PDF E HISTORIAL ═══ */
+.st-key-mode_dock {
+  padding: 7px;
+  border-radius: 18px;
+  background: rgba(10, 18, 36, 0.82);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 16px 36px -22px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.st-key-mode_dock [data-testid="stBaseButton-primary"],
+.st-key-mode_dock [data-testid="stBaseButton-secondary"] {
+  min-height: 44px !important;
+  border-radius: 13px !important;
+}
+
+.st-key-sheets_bar,
+.st-key-import_portal,
+.st-key-hist_portal {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 20px 22px 18px;
+  background: linear-gradient(165deg, rgba(14, 24, 48, 0.88), rgba(8, 14, 29, 0.94));
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 22px 48px -24px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.st-key-import_portal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--beam-angle),
+    transparent 0deg,
+    transparent 230deg,
+    rgba(20, 184, 166, 0.9) 295deg,
+    rgba(56, 189, 248, 1) 338deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.55;
+  animation: spinBeam 6.5s linear infinite;
+}
+
+.sheets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+.sheets-head-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sheets-orb {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: #FDE68A;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.34);
+  flex-shrink: 0;
+}
+.sheets-eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  color: #64748B;
+}
+.sheets-head-left strong {
+  display: block;
+  font: 800 17px/1.2 var(--display);
+  color: #F8FAFC;
+}
+.sheets-head-left small {
+  display: block;
+  font-size: 12px;
+  color: #94A3B8;
+  margin-top: 2px;
+}
+.sheets-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.sh-pill {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4.5px 11px;
+  border-radius: 999px;
+}
+.sh-pill.gold {
+  color: #FDE68A;
+  background: rgba(251, 191, 36, 0.13);
+  border: 1px solid rgba(251, 191, 36, 0.32);
+}
+.sh-pill.teal {
+  color: #5EEAD4;
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(94, 234, 212, 0.32);
+}
+
+.st-key-sheets_bar [data-testid="stBaseButton-primary"],
+.st-key-sheets_bar [data-testid="stBaseButton-secondary"] {
+  min-height: 40px !important;
+  border-radius: 11px !important;
+}
+.st-key-sheets_bar [data-testid="stBaseButton-primary"] p,
+.st-key-sheets_bar [data-testid="stBaseButton-secondary"] p {
+  font-size: 12.8px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  background: linear-gradient(105deg, rgba(16, 185, 129, 0.15), rgba(251, 191, 36, 0.1));
+  border: 1px solid rgba(52, 211, 153, 0.34);
+}
+.batch-ico {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(16, 185, 129, 0.22);
+  color: #6EE7B7;
+  flex-shrink: 0;
+}
+.batch-banner strong {
+  display: block;
+  font: 700 13px/1.2 var(--display);
+  color: #ECFDF5;
+}
+.batch-banner span {
+  display: block;
+  font-size: 11.5px;
+  color: #A7F3D0;
+  margin-top: 1px;
+}
+
+/* Dropzone de PDF a importar y de Excel a restaurar (100% blindado contra modo claro) */
+.st-key-import_portal [data-testid="stFileUploaderDropzone"],
+.st-key-excel_restore [data-testid="stFileUploaderDropzone"] {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  gap: 10px !important;
+  background: #070D1B !important;
+  background-color: #070D1B !important;
+  border: 1.5px dashed rgba(94, 234, 212, 0.38) !important;
+  border-radius: 16px !important;
+  padding: 28px 20px !important;
+  width: 100% !important;
+  transition: all 0.28s var(--ease) !important;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzone"]:hover,
+.st-key-excel_restore [data-testid="stFileUploaderDropzone"]:hover {
+  background: #0A152B !important;
+  border-color: #2DD4BF !important;
+  box-shadow: inset 0 0 28px -10px rgba(45, 212, 191, 0.38);
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"],
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"] {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"] > div,
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"] > div {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"] > div > span,
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+  font-size: 0;
+  line-height: 1.35;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"] > div > span::after {
+  content: 'Arrastra aquí el PDF que deseas corregir o reutilizar';
+  font-size: 14px;
+  font-weight: 600;
+  color: #E2E8F0;
+}
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"] > div > span::after {
+  content: 'Arrastra aquí un archivo Excel Historico convenios (.xlsx)';
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #E2E8F0;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"] > div > small,
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
+  display: none;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzoneInstructions"]::after {
+  content: 'Convenio de finiquito, Carta de renuncia o Constancia laboral · PDF';
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #94A3B8;
+}
+.st-key-excel_restore [data-testid="stFileUploaderDropzoneInstructions"]::after {
+  content: 'Restaura o fusiona registros anteriores en tu historial actual';
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #94A3B8;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzone"] button,
+.st-key-excel_restore [data-testid="stFileUploaderDropzone"] button {
+  background: rgba(20, 184, 166, 0.14) !important;
+  border: 1px solid rgba(94, 234, 212, 0.4) !important;
+  border-radius: 11px !important;
+  padding: 8px 20px !important;
+  margin: 0 !important;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzone"] button p,
+.st-key-excel_restore [data-testid="stFileUploaderDropzone"] button p {
+  font-size: 0;
+}
+.st-key-import_portal [data-testid="stFileUploaderDropzone"] button p::after {
+  content: 'Seleccionar archivo PDF';
+  font-size: 13px;
+  font-weight: 700;
+  color: #5EEAD4;
+}
+.st-key-excel_restore [data-testid="stFileUploaderDropzone"] button p::after {
+  content: 'Seleccionar archivo Excel';
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5EEAD4;
+}
+[data-testid="stFileUploaderFile"] {
+  background: #0B1428 !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+  border-radius: 11px !important;
+  color: #E2E8F0 !important;
+}
+[data-testid="stFileUploaderFile"] div {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+[data-testid="stFileUploaderFile"] * {
+  color: #E2E8F0 !important;
+}
+
+/* Tarjeta de vista previa de datos extraídos del PDF */
+.pdf-extract-card {
+  margin: 8px 0 4px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(12, 34, 46, 0.82), rgba(9, 17, 34, 0.9));
+  border: 1px solid rgba(52, 211, 153, 0.36);
+}
+.pec-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 11px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+.pec-doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6EE7B7;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.38);
+}
+.pec-origin {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #94A3B8;
+}
+.pec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.pec-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(7, 13, 27, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  min-width: 0;
+}
+.pec-item span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #64748B;
+  margin-bottom: 3px;
+}
+.pec-item strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #F8FAFC;
+  word-break: break-word;
+}
+.pec-item.gold {
+  border-color: rgba(251, 191, 36, 0.34);
+  background: rgba(42, 33, 14, 0.45);
+}
+.pec-item.gold strong {
+  color: #FDE68A;
+}
+
+/* Estado vacío del Historial */
+.hist-empty {
+  padding: 36px 22px;
+  text-align: center;
+  border-radius: 18px;
+  background: rgba(7, 13, 27, 0.55);
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+}
+.hist-empty-orb {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #5EEAD4;
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(94, 234, 212, 0.32);
+  animation: floatSmooth 4s ease-in-out infinite;
+}
+.hist-empty h3 {
+  font: 800 18px/1.25 var(--display) !important;
+  color: #F8FAFC !important;
+  margin: 0 0 6px !important;
+}
+.hist-empty p {
+  color: #94A3B8 !important;
+  font-size: 13.5px !important;
+  max-width: 520px;
+  margin: 0 auto !important;
+  line-height: 1.55 !important;
+}
+
+@media (max-width: 960px) {
+  .pec-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 580px) {
+  .pec-grid { grid-template-columns: 1fr; }
 }
 
 /* ═══ PIE DE PÁGINA EJECUTIVO ═══ */
